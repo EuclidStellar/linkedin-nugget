@@ -1,103 +1,276 @@
-import Image from "next/image";
 
-export default function Home() {
+// 'use client';
+
+// import { useState } from "react";
+// import { Loader2, Send, Sparkles } from "lucide-react";
+// import { Post, PostCard } from "@/components/ui/PostCard";
+// import { ThinkingDisplay } from "@/components/ui/ThinkingDisplay";
+// import { AnimatePresence, motion } from "framer-motion";
+// import { Button } from "@/components/ui/button";
+// import { Textarea } from "@/components/ui/textarea";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
+// export default function GeneratorPage() {
+//   const [isLoading, setIsLoading] = useState(false);
+//   const [error, setError] = useState<string | null>(null);
+//   const [thoughts, setThoughts] = useState<string>('');
+//   const [posts, setPosts] = useState<Post[]>([]);
+
+//   const resetState = () => {
+//     setThoughts('');
+//     setPosts([]);
+//     setError(null);
+//   };
+
+//   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+//     e.preventDefault();
+//     if (isLoading) return;
+
+//     resetState();
+//     setIsLoading(true);
+
+//     const formData = new FormData(e.currentTarget);
+//     const data = Object.fromEntries(formData.entries());
+
+//     try {
+//       const response = await fetch('/api/generate', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(data),
+//       });
+
+//       if (!response.body) throw new Error("The response body is empty.");
+
+//       const reader = response.body.getReader();
+//       const decoder = new TextDecoder();
+
+//       while (true) {
+//         const { value, done } = await reader.read();
+//         if (done) break;
+
+//         const chunk = decoder.decode(value);
+//         const lines = chunk.split('\n\n').filter(line => line.startsWith('data: '));
+
+//         for (const line of lines) {
+//           const jsonString = line.replace('data: ', '');
+//           if (jsonString.trim() === "") continue;
+//           const data = JSON.parse(jsonString);
+
+//           if (data.thought) setThoughts(prev => prev + data.thought);
+//           if (data.posts) setPosts(data.posts);
+//           if (data.error) throw new Error(data.error);
+//         }
+//       }
+//     } catch (err: any) {
+//       setError(err.message);
+//     } finally {
+//       setIsLoading(false);
+//     }
+//   };
+
+//   return (
+//     <main className="flex flex-col items-center w-full min-h-screen p-4 md:p-8">
+//       <div className="w-full max-w-2xl flex flex-col items-center">
+//         <header className="text-center mb-10">
+//           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">AI Post Generator</h1>
+//           <p className="mt-2 text-lg text-muted-foreground">Powered by Gemini 2.5 Pro's reasoning engine.</p>
+//         </header>
+
+//         <form onSubmit={handleSubmit} className="w-full space-y-6 mb-12">
+//           <div className="space-y-2">
+//             <Label htmlFor="topic">Topic</Label>
+//             <Textarea
+//               id="topic"
+//               name="topic"
+//               placeholder="e.g., Cold-start strategies for marketplaces"
+//               className="min-h-[100px] bg-secondary"
+//               required
+//             />
+//           </div>
+//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//             <div className="space-y-2">
+//               <Label htmlFor="tone">Tone</Label>
+//               <Input id="tone" name="tone" defaultValue="Professional" />
+//             </div>
+//             <div className="space-y-2">
+//               <Label htmlFor="audience">Audience</Label>
+//               <Input id="audience" name="audience" defaultValue="Tech Professionals" />
+//             </div>
+//           </div>
+//           <Button type="submit" className="w-full !mt-8" disabled={isLoading}>
+//             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+//             {isLoading ? 'Generating...' : 'Generate Posts'}
+//           </Button>
+//         </form>
+
+//         <AnimatePresence>
+//           <div className="w-full space-y-8 flex flex-col items-center">
+//             {thoughts && (
+//               <Accordion type="single" collapsible className="w-full">
+//                 <AccordionItem value="item-1">
+//                   <AccordionTrigger>
+//                     <span className="flex items-center">
+//                       <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+//                       Show Agent's Thought Process
+//                     </span>
+//                   </AccordionTrigger>
+//                   <AccordionContent>
+//                     <ThinkingDisplay thoughts={thoughts} />
+//                   </AccordionContent>
+//                 </AccordionItem>
+//               </Accordion>
+//             )}
+
+//             {posts.length > 0 && (
+//               <motion.div
+//                 initial={{ opacity: 0, y: 10 }}
+//                 animate={{ opacity: 1, y: 0 }}
+//                 className="w-full"
+//               >
+//                 <h2 className="text-2xl font-bold text-center mb-6">Generated Posts</h2>
+//                 <div className="space-y-6">
+//                   {posts.map((post, i) => <PostCard key={i} post={post} />)}
+//                 </div>
+//               </motion.div>
+//             )}
+
+//             {error && (
+//                <motion.div initial={{opacity:0}} animate={{opacity:1}} className="text-destructive-foreground bg-destructive p-4 rounded-lg w-full">
+//                  <strong>Error:</strong> {error}
+//                </motion.div>
+//             )}
+//           </div>
+//         </AnimatePresence>
+//       </div>
+//     </main>
+//   );
+// } 
+
+'use client';
+
+import { useState } from "react";
+import { Post, PostCard } from "@/components/ui/PostCard";
+import { ThinkingDisplay } from "@/components/ui/ThinkingDisplay";
+import { AnimatePresence, motion } from "framer-motion";
+import { PostForm } from "@/components/ui/PostForm";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Sparkles } from "lucide-react";
+
+export default function GeneratorPage() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [thoughts, setThoughts] = useState<string>('');
+  const [posts, setPosts] = useState<Post[]>([]);
+
+  const resetState = () => {
+    setThoughts('');
+    setPosts([]);
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isLoading) return;
+
+    resetState();
+    setIsLoading(true);
+
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+
+    try {
+      const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.body) throw new Error("The response body is empty.");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n\n').filter(line => line.startsWith('data: '));
+
+        for (const line of lines) {
+          try {
+            const jsonString = line.replace('data: ', '');
+            if (jsonString.trim() === "") continue;
+            const data = JSON.parse(jsonString);
+
+            if (data.thought) setThoughts(prev => prev + data.thought);
+            if (data.posts) setPosts(data.posts);
+            if (data.error) throw new Error(data.error);
+          } catch (e) {
+            console.error("Error parsing stream chunk:", e);
+          }
+        }
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="flex flex-col items-center w-full min-h-screen p-4 md:p-8">
+      <div className="w-full max-w-2xl flex flex-col items-center">
+        <header className="text-center mb-10">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">Thinking AI Post Generator</h1>
+          <p className="mt-2 text-lg text-muted-foreground">Powered by Gemini 2.5 Pro's reasoning engine.</p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        <div className="w-full mb-12">
+          <PostForm handleSubmit={handleSubmit} isLoading={isLoading} />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        <AnimatePresence>
+          <div className="w-full space-y-8 flex flex-col items-center">
+            {thoughts && (
+              <Accordion type="single" collapsible className="w-full">
+                <AccordionItem value="item-1" className="border-border/40">
+                  <AccordionTrigger>
+                    <span className="flex items-center text-muted-foreground hover:text-foreground transition-colors">
+                      <Sparkles className="h-4 w-4 mr-2 text-purple-400" />
+                      Show Agent's Thought Process
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ThinkingDisplay thoughts={thoughts} />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            )}
+
+            {posts.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full"
+              >
+                <h2 className="text-2xl font-bold text-center mb-6">Generated Posts</h2>
+                <div className="space-y-6">
+                  {posts.map((post, i) => <PostCard key={i} post={post} />)}
+                </div>
+              </motion.div>
+            )}
+
+            {error && (
+               <motion.div initial={{opacity:0}} animate={{opacity:1}} className="text-destructive-foreground bg-destructive p-4 rounded-lg w-full">
+                 <strong>Error:</strong> {error}
+               </motion.div>
+            )}
+          </div>
+        </AnimatePresence>
+      </div>
+    </main>
   );
 }
