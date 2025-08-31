@@ -139,6 +139,17 @@ export function PostForm({
       </div>
 
       <div className="grid gap-2">
+        <Label htmlFor="styleUrl">Mimic Style (Optional)</Label>
+        <Input
+          id="styleUrl"
+          name="styleUrl"
+          placeholder="Paste a LinkedIn post URL to copy its style"
+          disabled={isLoading}
+          type="url"
+        />
+      </div>
+
+      <div className="grid gap-2">
         <Label htmlFor="cta">Call to action</Label>
         <Textarea
           id="cta"

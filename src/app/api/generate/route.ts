@@ -1,117 +1,259 @@
-import { GoogleGenAI, Part } from "@google/genai";
-import { NextRequest } from "next/server";
+import { GoogleGenAI, Part, Tool } from "@google/genai"
+import { NextRequest } from "next/server"
+import * as cheerio from "cheerio"
 
 const genAI = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_API_KEY
-});
+  apiKey: process.env.GOOGLE_API_KEY,
+})
 
-function sendStreamedData(controller: ReadableStreamDefaultController<any>, data: { thought?: any; angles?: any; posts?: any[]; error?: any; }) {
-  controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+function sendStreamedData(
+  controller: ReadableStreamDefaultController<any>,
+  data: { thought?: any; angles?: any; posts?: any[]; error?: any },
+) {
+  controller.enqueue(`data: ${JSON.stringify(data)}\n\n`)
 }
 
-export async function POST(req: { json: () => PromiseLike<{ topic: any; tone: any; audience: any; cta: any; }> | { topic: any; tone: any; audience: any; cta: any; }; }) {
-  const { topic, tone, audience, cta } = await req.json();
+async function scrapeContent(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
+    if (!response.ok) {
+      throw new Error(`Failed to fetch URL: ${response.statusText}`)
+    }
+    const html = await response.text()
+    const $ = cheerio.load(html)
+    // A simple attempt to get the main content, this may need adjustment for different sites
+    const mainContent =
+      $('meta[property="og:description"]').attr("content") ||
+      $("article").text() ||
+      $("main").text() ||
+      $("body").text()
+    return mainContent.replace(/\s\s+/g, " ").trim()
+  } catch (error) {
+    console.error("Scraping error:", error)
+    return "" // Return empty string on failure
+  }
+}
+
+// Add a sleep function
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// In your API route, add retry logic with delay
+async function callGeminiWithRetry(params: any, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await genAI.models.generateContent(params);
+    } catch (error: any) {
+      if (error?.error?.code === 429 && attempt < maxRetries - 1) {
+        // Extract retry delay from error or use default
+        const retryDelay = 
+          parseInt(error?.error?.details?.[2]?.retryDelay?.replace('s', '') || '0') * 1000 || 2000 * (attempt + 1);
+        
+        console.log(`Rate limited. Retrying in ${retryDelay/1000} seconds...`);
+        await sleep(retryDelay);
+      } else {
+        throw error;
+      }
+    }
+  }
+  // If we've exhausted all retries, throw a more helpful error
+  throw new Error("Failed after maximum retry attempts");
+}
+
+export async function POST(req: NextRequest) {
+  const { topic, tone, audience, cta, styleUrl } = await req.json()
 
   if (!topic) {
-    return new Response(JSON.stringify({ error: "Topic is required" }), { status: 400 });
+    return new Response(JSON.stringify({ error: "Topic is required" }), { status: 400 })
   }
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        let styleGuide = "None"
+        if (styleUrl) {
+          sendStreamedData(controller, { thought: "1. Scrape Style URL...\n" })
+          const scrapedText = await scrapeContent(styleUrl)
+          if (scrapedText) {
+            sendStreamedData(controller, { thought: "2. Analyze Writing Style...\n" })
+            const styleAnalysisPrompt = `Analyze the following post's writing style. Identify its tone, sentence structure, emoji usage, and formatting. Output a concise summary of this style guide that can be used to generate new content.
+
+Scraped Post:
+---
+${scrapedText}
+---
+Style Guide Summary:`
+            const styleResult = await callGeminiWithRetry({
+              model: "gemini-2.5-flash",
+              contents: [{ role: "user", parts: [{ text: styleAnalysisPrompt }] }],
+            })
+            // FIX: Correctly access the text from the response
+            styleGuide = styleResult.text
+            sendStreamedData(controller, { thought: `   - Style guide created: ${styleGuide}\n` })
+          } else {
+            sendStreamedData(controller, { thought: "   - Could not scrape content, using default style.\n" })
+          }
+        }
+
+        sendStreamedData(controller, { thought: "3. Brainstorming Angles...\n" })
         const plannerPrompt = `
 As a world-class content strategist, your task is to analyze the topic "${topic}" for a target audience of ${audience}.
-Your goal is to brainstorm and then finalize 3 unique, compelling angles for LinkedIn posts.
+Your goal is to brainstorm and then finalize 2 unique, compelling angles for LinkedIn posts.
 Think step-by-step through the process:
 1. Identify the core concepts of the topic.
 2. Consider the audience's pain points, interests, and knowledge level.
 3. Brainstorm a list of potential angles (e.g., a contrarian take, a case study, a future prediction, a practical guide).
-4. Select the top 3 angles that are most likely to generate engagement.
-After your thought process, provide ONLY the final 3 angles as a clean JSON array of strings: ["Angle 1", "Angle 2", "Angle 3"].
-`;
-
-        // Streaming brainstormed angles with thought summaries enabled
-        const plannerStream = await genAI.models.generateContentStream({
+4. Select the top 2 angles that are most likely to generate engagement.
+After your thought process, provide ONLY the final 2 angles as a clean JSON array of strings: ["Angle 1", "Angle 2"].
+`
+        const plannerResult = await callGeminiWithRetry({
           model: "gemini-2.5-flash",
           contents: [{ role: "user", parts: [{ text: plannerPrompt }] }],
-          config: {
-            thinkingConfig: {
-              includeThoughts: true
-            },
-            responseMimeType: "application/json"
-          },
+          config: { responseMimeType: "application/json" },
+        })
 
-        });
+        // FIX: Correctly access the text from the response
+        const anglesText = plannerResult.text
+        const angles = JSON.parse(anglesText)
+        sendStreamedData(controller, { angles })
+        sendStreamedData(controller, { thought: `   - Angles: ${angles.join(", ")}\n` })
 
-        let anglesText = "";
-        for await (const chunk of plannerStream){
-            const parts: Part[] = chunk.candidates?.[0]?.content?.parts || [];
-for (const part of parts) {
-  if (part.thought) {
-    sendStreamedData(controller, { thought: part.text }); // Thought summaries
-  } else if (part.text) {
-    anglesText += part.text;
-  }
-}
+        sendStreamedData(controller, { thought: "4. Drafting Posts for each angle...\n" })
+        // Instead of Promise.all for all angles, process them sequentially
+        const generatedPosts = [];
+        for (const angle of angles) {
+          sendStreamedData(controller, { thought: `   - Processing angle: "${angle}"\n` });
+          
+          // Process each angle with a delay between them
+          // Pass all required parameters to the processAngle function
+          const post = await processAngle(
+            angle, 
+            topic, 
+            audience, 
+            tone, 
+            styleGuide, 
+            cta, 
+            controller
+          );
+          generatedPosts.push(post);
+          
+          // Add a delay between angles to avoid rate limiting
+          await sleep(2000);
         }
 
-
-        const angles = JSON.parse(anglesText);
-        sendStreamedData(controller, { angles });
-
-        const postPromises = angles.map(async (angle: any) => {
-          const postDrafterPrompt = `
-You are an expert LinkedIn copywriter.
-Your task is to create a complete and engaging LinkedIn post based on a specific angle.
-The original topic was: "${topic}".
-The specific angle to focus on is: "${angle}".
-The target audience is: "${audience}".
-The desired tone is: "${tone}".
-
-Your final output must be a single, clean JSON object with the following structure:
-{
-  "content": "The main body of the LinkedIn post. It should have a strong hook, valuable insights, and be formatted with appropriate line breaks and 2-3 relevant emojis.",
-  "hooks": {
-    "questionHook": "A rewritten version of the first sentence as an intriguing question.",
-    "statementHook": "A rewritten version of the first sentence as a bold or surprising statement."
-  },
-  "hashtags": ["#relevant", "#hashtags", "#for", "#the", "#post"],
-  "finalCta": "A compelling call-to-action that encourages comments or discussion. Use the user's suggestion if provided: ${cta}"
-}
-`;
-          const result = await genAI.models.generateContent({
-            model: "gemini-2.5-pro",
-            contents: [{ role: "user", parts: [{ text: postDrafterPrompt }] }],
-            config: {
-              responseMimeType: "application/json"
-            }
-          });
-
-         const responseText = await result.text;
-if (!responseText) throw new Error("Empty response");
-
-const postData = JSON.parse(responseText);
-
-return { ...postData, angle };
-        });
-
-        const generatedPosts = await Promise.all(postPromises);
-        sendStreamedData(controller, { posts: generatedPosts });
-
-      } catch (error) {
-        console.error("API Error:", error);
-        sendStreamedData(controller, { error: "An unexpected error occurred." });
+        sendStreamedData(controller, { posts: generatedPosts })
+        sendStreamedData(controller, { thought: "5. All posts generated successfully!\n" })
+      } catch (error: any) {
+        console.error("API Error:", error)
+        let errorMessage = error.message || "An unexpected error occurred."
+        // Check for the specific 503 overload error from Gemini
+        if (
+          typeof errorMessage === "string" &&
+          errorMessage.includes('"code":503') &&
+          errorMessage.includes("overloaded")
+        ) {
+          errorMessage = "GEMINI_OVERLOADED"
+        }
+        sendStreamedData(controller, { error: errorMessage })
       } finally {
-        controller.close();
+        controller.close()
       }
-    }
-  });
+    },
+  })
 
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive"
-    }
-  });
+      "Connection": "keep-alive",
+    },
+  })
+}
+
+// Helper function to process a single angle
+async function processAngle(
+  angle: string, 
+  topic: string, 
+  audience: string, 
+  tone: string, 
+  styleGuide: string, 
+  cta: string,
+  controller: ReadableStreamDefaultController
+) {
+  const startTime = Date.now()
+  const postDrafterPrompt = `
+You are an expert LinkedIn copywriter. Your task is to create the main body of an engaging LinkedIn post.
+- Original topic: "${topic}"
+- Specific angle: "${angle}"
+- Target audience: "${audience}"
+- Desired tone: "${tone}"
+- Writing Style Guide: ${styleGuide}
+
+Your output must be ONLY the text for the body of the post. It should have a strong hook, valuable insights, and be formatted with appropriate line breaks and 2-3 relevant emojis based on the style guide.
+`
+  const drafterResult = await callGeminiWithRetry({
+    model: "gemini-2.5-pro",
+    contents: [{ role: "user", parts: [{ text: postDrafterPrompt }] }],
+  })
+  
+  const postContent = drafterResult.text
+  const usageMetadata = drafterResult.usageMetadata
+
+  sendStreamedData(controller, { thought: `   - Post drafted for angle: "${angle}"\n` })
+
+  // Agentic Step: A/B Test Hooks
+  sendStreamedData(controller, { thought: "   - Generating A/B test hooks...\n" })
+  const firstSentence = postContent.split("\n")[0]
+  
+  // Use sequential calls instead of Promise.all to avoid rate limits
+  const questionHookResult = await callGeminiWithRetry({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: `Rewrite this opening line as an intriguing question: "${firstSentence}"` }] }],
+  })
+  
+  await sleep(1000); // Add delay between calls
+  
+  const statementHookResult = await callGeminiWithRetry({
+    model: "gemini-2.5-flash", 
+    contents: [{ role: "user", parts: [{ text: `Rewrite this opening line as a bold or surprising statement: "${firstSentence}"` }] }],
+  })
+
+  // Agentic Step: Data-Driven Hashtags using Google Search
+  sendStreamedData(controller, { thought: "   - Searching for relevant hashtags...\n" })
+  const hashtagTool: Tool = { googleSearch: {} }
+  const hashtagPrompt = `Based on the following post content, what are the top 5-7 most relevant and trending LinkedIn hashtags?
+
+Post:
+---
+${postContent}
+---
+
+Return ONLY the hashtags in the format: #hashtag1 #hashtag2 #hashtag3
+`
+  const hashtagResult = await callGeminiWithRetry({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: hashtagPrompt }] }],
+    tools: [hashtagTool],
+  })
+  
+  const hashtagsText = hashtagResult.text
+  const hashtags = hashtagsText.match(/#\w+/g) || []
+
+  // Final CTA
+  const finalCta = cta || "What are your thoughts? Drop a comment below!"
+  const endTime = Date.now()
+
+  return {
+    angle,
+    content: postContent,
+    hooks: {
+      questionHook: questionHookResult.text,
+      statementHook: statementHookResult.text,
+    },
+    hashtags,
+    finalCta,
+    metadata: {
+      generationTime: endTime - startTime,
+      tokens: usageMetadata?.totalTokenCount || Math.round(postContent.length / 4),
+    },
+  }
 }
