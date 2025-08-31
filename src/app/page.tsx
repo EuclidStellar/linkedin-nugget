@@ -73,8 +73,8 @@ export default function Page() {
           }
         }
       }
-    } catch (e: any) {
-      setError(e.message || "Unexpected error")
+    } catch (e: unknown) {
+      setError((e as Error)?.message || "Unexpected error")
     } finally {
       setIsLoading(false)
     }

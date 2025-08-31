@@ -1,4 +1,4 @@
-import { GoogleGenAI, Part, Tool } from "@google/genai"
+import { GoogleGenAI, Tool } from "@google/genai"  // Removed unused 'Part'
 import { NextRequest } from "next/server"
 import * as cheerio from "cheerio"
 
@@ -6,11 +6,19 @@ const genAI = new GoogleGenAI({
   apiKey: process.env.GOOGLE_API_KEY,
 })
 
+type StreamData = {
+  thought?: string
+  angles?: string[]
+  posts?: Post[]
+  error?: string
+}
+
 function sendStreamedData(
-  controller: ReadableStreamDefaultController<any>,
-  data: { thought?: any; angles?: any; posts?: any[]; error?: any },
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  data: StreamData,
 ) {
-  controller.enqueue(`data: ${JSON.stringify(data)}\n\n`)
+  const encoder = new TextEncoder();
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 }
 
 async function scrapeContent(url: string): Promise<string> {
@@ -38,14 +46,31 @@ async function scrapeContent(url: string): Promise<string> {
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 
-async function callGeminiWithRetry(params: any, maxRetries = 3) {
+type GeminiParams = {
+  model: string
+  contents: { role: string; parts: { text: string }[] }[]
+  config?: { responseMimeType: string }
+  tools?: Tool[]
+}
+
+type GeminiError = {
+  error?: {
+    code?: number
+    details?: {
+      retryDelay?: string
+    }[]
+  }
+}
+
+async function callGeminiWithRetry(params: GeminiParams, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await genAI.models.generateContent(params);
-    } catch (error: any) {
-      if (error?.error?.code === 429 && attempt < maxRetries - 1) {
+    } catch (error: unknown) {
+      const geminiError = error as GeminiError;
+      if (geminiError.error?.code === 429 && attempt < maxRetries - 1) {
         const retryDelay = 
-          parseInt(error?.error?.details?.[2]?.retryDelay?.replace('s', '') || '0') * 1000 || 2000 * (attempt + 1);
+          parseInt(geminiError.error.details?.[2]?.retryDelay?.replace('s', '') || '0') * 1000 || 2000 * (attempt + 1);
         
         console.log(`Rate limited. Retrying in ${retryDelay/1000} seconds...`);
         await sleep(retryDelay);
@@ -85,7 +110,7 @@ Style Guide Summary:`
               contents: [{ role: "user", parts: [{ text: styleAnalysisPrompt }] }],
             })
 
-            styleGuide = styleResult.text
+            styleGuide = styleResult.text || "None"
             sendStreamedData(controller, { thought: `   - Style guide created: ${styleGuide}\n` })
           } else {
             sendStreamedData(controller, { thought: "   - Could not scrape content, using default style.\n" })
@@ -109,7 +134,7 @@ After your thought process, provide ONLY the final 2 angles as a clean JSON arra
           config: { responseMimeType: "application/json" },
         })
 
-        const anglesText = plannerResult.text
+        const anglesText = plannerResult.text || '[]'
         const angles = JSON.parse(anglesText)
         sendStreamedData(controller, { angles })
         sendStreamedData(controller, { thought: `   - Angles: ${angles.join(", ")}\n` })
@@ -136,9 +161,9 @@ After your thought process, provide ONLY the final 2 angles as a clean JSON arra
 
         sendStreamedData(controller, { posts: generatedPosts })
         sendStreamedData(controller, { thought: "5. All posts generated successfully!\n" })
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("API Error:", error)
-        let errorMessage = error.message || "An unexpected error occurred."
+        let errorMessage = (error instanceof Error ? error.message : String(error)) || "An unexpected error occurred."
         // Check for the specific 503 overload error from Gemini
         if (
           typeof errorMessage === "string" &&
@@ -163,6 +188,22 @@ After your thought process, provide ONLY the final 2 angles as a clean JSON arra
   })
 }
 
+type Post = {
+  angle?: string
+  content: string
+  hooks?: {
+    questionHook?: string
+    statementHook?: string
+  }
+  hashtags?: string[]
+  citations?: string
+  finalCta?: string
+  metadata?: {
+    generationTime?: number
+    tokens?: number
+  }
+}
+
 async function processAngle(
   angle: string, 
   topic: string, 
@@ -170,8 +211,8 @@ async function processAngle(
   tone: string, 
   styleGuide: string, 
   cta: string,
-  controller: ReadableStreamDefaultController
-) {
+  controller: ReadableStreamDefaultController<Uint8Array>
+): Promise<Post> {
   const startTime = Date.now()
   const postDrafterPrompt = `
 You are an expert LinkedIn copywriter. Your task is to create the main body of an engaging LinkedIn post.
@@ -188,7 +229,7 @@ Your output must be ONLY the text for the body of the post. It should have a str
     contents: [{ role: "user", parts: [{ text: postDrafterPrompt }] }],
   })
   
-  let postContent = drafterResult.text
+  let postContent = drafterResult.text || ""
   const usageMetadata = drafterResult.usageMetadata
 
   sendStreamedData(controller, { thought: `   - Post drafted for angle: "${angle}"\n` })
@@ -206,7 +247,7 @@ Response:`
     model: "gemini-2.5-flash",
     contents: [{ role: "user", parts: [{ text: guardrailPrompt }] }],
   })
-  const guardrailResponse = guardrailResult.text.trim()
+  const guardrailResponse = (guardrailResult.text || "").trim()
   if (guardrailResponse !== "APPROVED") {
     sendStreamedData(controller, { thought: `   - Content flagged and sanitized: ${guardrailResponse}\n` })
     postContent = guardrailResponse 
@@ -215,7 +256,7 @@ Response:`
   }
 
   sendStreamedData(controller, { thought: "   - Generating A/B test hooks...\n" })
-  const firstSentence = postContent.split("\n")[0]
+  const firstSentence = (postContent || "").split("\n")[0]
 
   const questionHookResult = await callGeminiWithRetry({
     model: "gemini-2.5-flash",
@@ -251,7 +292,7 @@ CITATIONS:
     tools: [hashtagTool],
   })
   
-  const hashtagResponse = hashtagResult.text
+  const hashtagResponse = hashtagResult.text || ""
   const hashtags = hashtagResponse.match(/#\w+/g) || []
   const citations = hashtagResponse.match(/CITATIONS:\s*([\s\S]*)/)?.[1]?.trim() || ""
 

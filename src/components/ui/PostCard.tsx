@@ -10,7 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 export type Post = {
-  citations: any
+  citations?: string  // Changed from 'any'
   angle?: string
   content: string
   hooks?: {
@@ -57,7 +57,6 @@ function sanitizeHashtag(tag: string) {
 
 export function PostCard({ post, index }: { post: Post; index: number }) {
   const [copiedBody, setCopiedBody] = useState(false)
-  const [copiedTags, setCopiedTags] = useState(false)
   const [copiedAll, setCopiedAll] = useState(false)
   
   const [selectedHook, setSelectedHook] = useState<"question" | "statement">(
