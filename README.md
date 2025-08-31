@@ -7,6 +7,8 @@ An advanced content generation tool that leverages an agentic AI workflow to cre
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
 
+## PLay the Video 
+[![Watch the video](https://img.youtube.com/vi/OTUC-7jyjm8/maxresdefault.jpg)](https://youtu.be/OTUC-7jyjm8)
 ## Overview
 
 Creating consistently engaging content for professional platforms like LinkedIn is challenging and time-consuming. This tool goes beyond simple text generation by employing an **agentic AI model** that *thinks*, *plans*, and *researches* before writing.
