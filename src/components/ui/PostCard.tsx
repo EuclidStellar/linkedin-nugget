@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 
 export type Post = {
+  citations: any
   angle?: string
   content: string
   hooks?: {
@@ -264,6 +265,18 @@ export function PostCard({ post, index }: { post: Post; index: number }) {
             </div>
           )}
         </div>
+
+        {/* Citations Section - NEW */}
+        {post.citations && post.citations.trim() && (
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Sources & Citations
+            </h4>
+            <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {post.citations}
+            </div>
+          </div>
+        )}
 
         {/* Utilities */}
         <div className="flex flex-wrap items-center gap-2 justify-end">

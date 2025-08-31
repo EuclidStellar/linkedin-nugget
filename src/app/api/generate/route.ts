@@ -97,7 +97,7 @@ Style Guide Summary:`
         sendStreamedData(controller, { thought: "3. Brainstorming Angles...\n" })
         const plannerPrompt = `
 As a world-class content strategist, your task is to analyze the topic "${topic}" for a target audience of ${audience}.
-Your goal is to brainstorm and then finalize 2 unique, compelling angles for LinkedIn posts.
+Your goal is to brainstorm and then finalize 2 unique, compelling angles for LinkedIn posts.  
 Think step-by-step through the process:
 1. Identify the core concepts of the topic.
 2. Consider the audience's pain points, interests, and knowledge level.
@@ -195,10 +195,32 @@ Your output must be ONLY the text for the body of the post. It should have a str
     contents: [{ role: "user", parts: [{ text: postDrafterPrompt }] }],
   })
   
-  const postContent = drafterResult.text
+  let postContent = drafterResult.text
   const usageMetadata = drafterResult.usageMetadata
 
   sendStreamedData(controller, { thought: `   - Post drafted for angle: "${angle}"\n` })
+
+  // Agentic Step: Quality Guardrail - Check for inappropriate content
+  sendStreamedData(controller, { thought: "   - Applying quality guardrail...\n" })
+  const guardrailPrompt = `Review the following LinkedIn post content for any inappropriate language, profanity, sensitive topics, or content that might violate professional standards. If you find any issues, suggest a sanitized version. If the content is appropriate, respond with "APPROVED".
+
+Post Content:
+---
+${postContent}
+---
+
+Response:`
+  const guardrailResult = await callGeminiWithRetry({
+    model: "gemini-2.5-flash",
+    contents: [{ role: "user", parts: [{ text: guardrailPrompt }] }],
+  })
+  const guardrailResponse = guardrailResult.text.trim()
+  if (guardrailResponse !== "APPROVED") {
+    sendStreamedData(controller, { thought: `   - Content flagged and sanitized: ${guardrailResponse}\n` })
+    postContent = guardrailResponse // Use the sanitized version
+  } else {
+    sendStreamedData(controller, { thought: "   - Content approved by guardrail.\n" })
+  }
 
   // Agentic Step: A/B Test Hooks
   sendStreamedData(controller, { thought: "   - Generating A/B test hooks...\n" })
@@ -217,17 +239,21 @@ Your output must be ONLY the text for the body of the post. It should have a str
     contents: [{ role: "user", parts: [{ text: `Rewrite this opening line as a bold or surprising statement: "${firstSentence}"` }] }],
   })
 
-  // Agentic Step: Data-Driven Hashtags using Google Search
-  sendStreamedData(controller, { thought: "   - Searching for relevant hashtags...\n" })
+  // Agentic Step: Data-Driven Hashtags with Citations
+  sendStreamedData(controller, { thought: "   - Searching for relevant hashtags and citations...\n" })
   const hashtagTool: Tool = { googleSearch: {} }
-  const hashtagPrompt = `Based on the following post content, what are the top 5-7 most relevant and trending LinkedIn hashtags?
+  const hashtagPrompt = `Based on the following post content, what are the top 5-7 most relevant and trending LinkedIn hashtags? Also, provide 2-3 relevant citation links from recent, authoritative sources related to this topic.
 
 Post:
 ---
 ${postContent}
 ---
 
-Return ONLY the hashtags in the format: #hashtag1 #hashtag2 #hashtag3
+Return your response in this exact format:
+HASHTAGS: #hashtag1 #hashtag2 #hashtag3
+CITATIONS: 
+- [Source Title](URL) - Brief description
+- [Source Title](URL) - Brief description
 `
   const hashtagResult = await callGeminiWithRetry({
     model: "gemini-2.5-flash",
@@ -235,8 +261,9 @@ Return ONLY the hashtags in the format: #hashtag1 #hashtag2 #hashtag3
     tools: [hashtagTool],
   })
   
-  const hashtagsText = hashtagResult.text
-  const hashtags = hashtagsText.match(/#\w+/g) || []
+  const hashtagResponse = hashtagResult.text
+  const hashtags = hashtagResponse.match(/#\w+/g) || []
+  const citations = hashtagResponse.match(/CITATIONS:\s*([\s\S]*)/)?.[1]?.trim() || ""
 
   // Final CTA
   const finalCta = cta || "What are your thoughts? Drop a comment below!"
@@ -250,6 +277,7 @@ Return ONLY the hashtags in the format: #hashtag1 #hashtag2 #hashtag3
       statementHook: statementHookResult.text,
     },
     hashtags,
+    citations, // New field for citations
     finalCta,
     metadata: {
       generationTime: endTime - startTime,
