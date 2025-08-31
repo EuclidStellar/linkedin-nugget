@@ -21,7 +21,7 @@ async function scrapeContent(url: string): Promise<string> {
     }
     const html = await response.text()
     const $ = cheerio.load(html)
-    // A simple attempt to get the main content, this may need adjustment for different sites
+  
     const mainContent =
       $('meta[property="og:description"]').attr("content") ||
       $("article").text() ||
@@ -30,21 +30,20 @@ async function scrapeContent(url: string): Promise<string> {
     return mainContent.replace(/\s\s+/g, " ").trim()
   } catch (error) {
     console.error("Scraping error:", error)
-    return "" // Return empty string on failure
+    return "" 
   }
 }
 
-// Add a sleep function
+
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// In your API route, add retry logic with delay
+
 async function callGeminiWithRetry(params: any, maxRetries = 3) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await genAI.models.generateContent(params);
     } catch (error: any) {
       if (error?.error?.code === 429 && attempt < maxRetries - 1) {
-        // Extract retry delay from error or use default
         const retryDelay = 
           parseInt(error?.error?.details?.[2]?.retryDelay?.replace('s', '') || '0') * 1000 || 2000 * (attempt + 1);
         
@@ -55,7 +54,6 @@ async function callGeminiWithRetry(params: any, maxRetries = 3) {
       }
     }
   }
-  // If we've exhausted all retries, throw a more helpful error
   throw new Error("Failed after maximum retry attempts");
 }
 
@@ -86,7 +84,7 @@ Style Guide Summary:`
               model: "gemini-2.5-flash",
               contents: [{ role: "user", parts: [{ text: styleAnalysisPrompt }] }],
             })
-            // FIX: Correctly access the text from the response
+
             styleGuide = styleResult.text
             sendStreamedData(controller, { thought: `   - Style guide created: ${styleGuide}\n` })
           } else {
@@ -111,20 +109,16 @@ After your thought process, provide ONLY the final 2 angles as a clean JSON arra
           config: { responseMimeType: "application/json" },
         })
 
-        // FIX: Correctly access the text from the response
         const anglesText = plannerResult.text
         const angles = JSON.parse(anglesText)
         sendStreamedData(controller, { angles })
         sendStreamedData(controller, { thought: `   - Angles: ${angles.join(", ")}\n` })
 
         sendStreamedData(controller, { thought: "4. Drafting Posts for each angle...\n" })
-        // Instead of Promise.all for all angles, process them sequentially
         const generatedPosts = [];
         for (const angle of angles) {
           sendStreamedData(controller, { thought: `   - Processing angle: "${angle}"\n` });
-          
-          // Process each angle with a delay between them
-          // Pass all required parameters to the processAngle function
+    
           const post = await processAngle(
             angle, 
             topic, 
@@ -169,7 +163,6 @@ After your thought process, provide ONLY the final 2 angles as a clean JSON arra
   })
 }
 
-// Helper function to process a single angle
 async function processAngle(
   angle: string, 
   topic: string, 
@@ -200,7 +193,6 @@ Your output must be ONLY the text for the body of the post. It should have a str
 
   sendStreamedData(controller, { thought: `   - Post drafted for angle: "${angle}"\n` })
 
-  // Agentic Step: Quality Guardrail - Check for inappropriate content
   sendStreamedData(controller, { thought: "   - Applying quality guardrail...\n" })
   const guardrailPrompt = `Review the following LinkedIn post content for any inappropriate language, profanity, sensitive topics, or content that might violate professional standards. If you find any issues, suggest a sanitized version. If the content is appropriate, respond with "APPROVED".
 
@@ -217,16 +209,14 @@ Response:`
   const guardrailResponse = guardrailResult.text.trim()
   if (guardrailResponse !== "APPROVED") {
     sendStreamedData(controller, { thought: `   - Content flagged and sanitized: ${guardrailResponse}\n` })
-    postContent = guardrailResponse // Use the sanitized version
+    postContent = guardrailResponse 
   } else {
     sendStreamedData(controller, { thought: "   - Content approved by guardrail.\n" })
   }
 
-  // Agentic Step: A/B Test Hooks
   sendStreamedData(controller, { thought: "   - Generating A/B test hooks...\n" })
   const firstSentence = postContent.split("\n")[0]
-  
-  // Use sequential calls instead of Promise.all to avoid rate limits
+
   const questionHookResult = await callGeminiWithRetry({
     model: "gemini-2.5-flash",
     contents: [{ role: "user", parts: [{ text: `Rewrite this opening line as an intriguing question: "${firstSentence}"` }] }],
@@ -239,7 +229,7 @@ Response:`
     contents: [{ role: "user", parts: [{ text: `Rewrite this opening line as a bold or surprising statement: "${firstSentence}"` }] }],
   })
 
-  // Agentic Step: Data-Driven Hashtags with Citations
+
   sendStreamedData(controller, { thought: "   - Searching for relevant hashtags and citations...\n" })
   const hashtagTool: Tool = { googleSearch: {} }
   const hashtagPrompt = `Based on the following post content, what are the top 5-7 most relevant and trending LinkedIn hashtags? Also, provide 2-3 relevant citation links from recent, authoritative sources related to this topic.
@@ -265,7 +255,6 @@ CITATIONS:
   const hashtags = hashtagResponse.match(/#\w+/g) || []
   const citations = hashtagResponse.match(/CITATIONS:\s*([\s\S]*)/)?.[1]?.trim() || ""
 
-  // Final CTA
   const finalCta = cta || "What are your thoughts? Drop a comment below!"
   const endTime = Date.now()
 
