@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Loader2, Sparkles } from "lucide-react"
+import { Loader2, Sparkles, CheckCircle, XCircle } from "lucide-react"
 import { ThinkingDisplay } from "@/components/ui/ThinkingDisplay"
 import { PostCard, type Post } from "@/components/ui/PostCard"
 import { PostForm } from "@/components/ui/PostForm"
@@ -14,12 +14,30 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null)
   const [thoughts, setThoughts] = useState<string>("")
   const [posts, setPosts] = useState<Post[]>([])
+  const [healthStatus, setHealthStatus] = useState<"OK" | "ERROR" | "LOADING">("LOADING")
 
   const resetState = () => {
     setThoughts("")
     setPosts([])
     setError(null)
   }
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await fetch("/api/health")
+        if (res.ok) {
+          const data = await res.json()
+          setHealthStatus(data.status === "OK" ? "OK" : "ERROR")
+        } else {
+          setHealthStatus("ERROR")
+        }
+      } catch {
+        setHealthStatus("ERROR")
+      }
+    }
+    checkHealth()
+  }, [])
 
   async function handleSubmit(formData: FormData) {
     if (isLoading) return
@@ -67,9 +85,22 @@ export default function Page() {
       {/* Container for Form and Header with a constrained width */}
       <div className="w-full max-w-2xl flex flex-col gap-8">
         <header className="text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground mb-2">
             <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
             Thinking AI Post Generator
+          </div>
+          {/* New: Health Status Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1 text-xs">
+            {healthStatus === "OK" ? (
+              <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+            ) : healthStatus === "ERROR" ? (
+              <XCircle className="h-3.5 w-3.5 text-red-500" />
+            ) : (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+            )}
+            <span className={healthStatus === "OK" ? "text-green-600" : healthStatus === "ERROR" ? "text-red-600" : "text-muted-foreground"}>
+              Service Status: {healthStatus === "LOADING" ? "Checking..." : healthStatus}
+            </span>
           </div>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-balance mt-4 font-sans">
             Minimal LinkedIn Post Creator
