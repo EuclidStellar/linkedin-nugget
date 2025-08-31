@@ -25,12 +25,14 @@ export function ThinkingDisplay({ thoughts }: { thoughts: string }) {
             setCopied(true)
             setTimeout(() => setCopied(false), 1400)
           }}
+          aria-label="Copy reasoning"
+          title="Copy reasoning"
         >
           {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
           {copied ? "Copied" : "Copy"}
         </Button>
       </div>
-      <div ref={scrollRef} className="max-h-64 overflow-auto">
+      <div ref={scrollRef} className="max-h-72 overflow-auto" aria-live="polite">
         <pre className="whitespace-pre-wrap px-4 py-3 text-sm leading-6 font-mono text-muted-foreground border-l-2 border-border">
           {thoughts}
         </pre>
