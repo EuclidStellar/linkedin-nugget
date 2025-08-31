@@ -52,8 +52,8 @@ graph TD
     H2 --> I2[5b. Quality Guardrail Check];
     I1 --> J1[6a. Generate A/B Test Hooks];
     I2 --> J2[6b. Generate A/B Test Hooks];
-    J1 --> K1[7a. Tool Use: Google Search for Hashtags & Citations];
-    J2 --> K2[7b. Tool Use: Google Search for Hashtags & Citations];
+    J1 --> K1[Google Search for Citations];
+    J2 --> K2[Google Search for Citations];
     K1 --> L1[End: Assemble Post 1];
     K2 --> L2[End: Assemble Post 2];
 ```
