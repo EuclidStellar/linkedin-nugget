@@ -126,13 +126,15 @@ export function PostCard({ post, index }: { post: Post; index: number }) {
   }
 
   const buildLinkedInText = () => {
+    const angle = normalizeForLinkedIn(post.angle || "")
     const hook = normalizeForLinkedIn(getCurrentHook())
     const body = normalizeForLinkedIn(post.content || "")
     const cta = normalizeForLinkedIn(post.finalCta || "")
     const cleanedTags = tags.map(sanitizeHashtag).filter(Boolean).join(" ")
 
     const parts: string[] = []
-    if (hook) parts.push(hook)
+    if (angle) parts.push(angle)
+    if (hook) parts.push("", hook)
     if (body) parts.push("", body)
     if (cta) parts.push("", cta)
     if (cleanedTags) parts.push("", cleanedTags)
@@ -170,9 +172,8 @@ export function PostCard({ post, index }: { post: Post; index: number }) {
   return (
     <Card className="border-border/70 bg-transparent w-full max-w-none flex flex-col">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center justify-start text-xs text-muted-foreground">
           <span>Post {index}</span>
-          {post.angle && <span className="truncate max-w-[60%]">{post.angle}</span>}
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-4 flex-grow flex flex-col">
@@ -237,10 +238,13 @@ export function PostCard({ post, index }: { post: Post; index: number }) {
         )}
 
         {/* Post Preview Card */}
-        <div className="flex-grow flex flex-col rounded-md border border-border/60 bg-secondary/30 p-4 space-y-4">
-          <p className="font-semibold text-foreground leading-snug">{getCurrentHook()}</p>
-          <div className="w-full border-t border-border/60"></div>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground flex-grow">{post.content}</p>
+        <div className="flex-grow flex flex-col rounded-md border border-border/60 bg-secondary/30 p-4 space-y-3">
+          {post.angle && (
+            <p className="font-semibold text-foreground text-base leading-snug">{post.angle}</p>
+          )}
+          <p className="text-sm text-muted-foreground leading-relaxed">{getCurrentHook()}</p>
+          {(post.angle || getCurrentHook()) && <div className="w-full border-t border-border/60"></div>}
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground flex-grow leading-relaxed">{post.content}</p>
         </div>
 
         {/* CTA and Hashtags */}
@@ -279,8 +283,8 @@ export function PostCard({ post, index }: { post: Post; index: number }) {
             size="sm"
             onClick={() => copy(buildLinkedInText(), setCopiedAll)}
             className="text-xs h-7 px-2"
-            aria-label="Copy all (Hook + Content + Tags)"
-            title="Copy all (Hook + Content + Tags)"
+            aria-label="Copy all (Title + Hook + Content + Tags)"
+            title="Copy all (Title + Hook + Content + Tags)"
           >
             {copiedAll ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
             Copy All
